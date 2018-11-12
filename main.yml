@@ -1,0 +1,200 @@
+---
+- name: Change OpenShift Subdomain 
+  hosts: masters
+  gather_facts: True
+  vars:
+    router: "infranode00.example.com"
+    master_cluster_public_subdomain: srv.ravcloud.com
+    master_cert: "/etc/origin/master/star.{{ master_cluster_public_subdomain }}.crt"
+    master_key: "/etc/origin/master/star.{{ master_cluster_public_subdomain }}.key"
+    master_config: /etc/origin/master/master-config.yaml
+    webconfig_config: /etc/origin/master/webconsole-config.yaml
+    oauth: 
+        openshift-web-console: 
+            url: "https://{{ openshift_master_cluster_public_hostname }}/console/"
+            configmap: webconsole-config
+        openshift-console:
+            url: "https://console.{{ routing_config_subdomain }}/"
+            configmap: console-config
+  roles:
+  - kwoodson.yedit 
+  tasks:  
+  - name: Wait for connection to be available
+    local_action:
+      module: wait_for
+      host: "{{ item }}"
+      state: started
+      port: 22 
+      delay: 5
+      connect_timeout: 15
+      timeout: 600
+    with_items:
+    - "{{ groups['nodes'] }}"
+
+# TODO: Get the router a better way
+  - name: Get IP Address
+    uri:
+      url: "http://www.opentlc.com/getip"
+      return_content: True
+    delegate_to: "{{ router }}"
+    register: getip 
+
+  - set_fact:
+      openshift_master_default_subdomain: "{{ getip.content | replace('\n', '')}}.xip.io"
+
+  - debug:
+      msg: "{{  openshift_master_default_subdomain  }}"
+
+# Use the new openshift_master_default_subdomain
+- import_playbook: /usr/share/ansible/openshift-ansible/playbooks/openshift-hosted/redeploy-router-certificates.yml
+
+- name: Change Public Url
+  hosts: masters
+  gather_facts: True
+  vars:
+    master_cluster_public_subdomain: srv.ravcloud.com
+    master_cert: "/etc/origin/master/star.{{ master_cluster_public_subdomain }}.crt"
+    master_key: "/etc/origin/master/star.{{ master_cluster_public_subdomain }}.key"
+    master_config: /etc/origin/master/master-config.yaml
+    webconfig_config: /etc/origin/master/webconsole-config.yaml
+    oauth: 
+        openshift-web-console: 
+            url: "https://{{ openshift_master_cluster_public_hostname }}/console/"
+            configmap: webconsole-config
+        openshift-console:
+            url: "https://console.{{ openshift_master_default_subdomain }}/"
+            configmap: console-config
+  roles:
+  - kwoodson.yedit 
+  tasks:  
+  - debug:
+      msg: "{{ oauth['openshift-console'].url }}"
+  - name: Create wildcard certificate
+    command: >
+            oc adm ca create-server-cert
+                --signer-cert=/etc/origin/master/ca.crt
+                --signer-key=/etc/origin/master/ca.key
+                --signer-serial=/etc/origin/master/ca.serial.txt
+                --hostnames='*.{{ master_cluster_public_subdomain }}'
+                --cert={{ master_cert }}
+                --key={{ master_key }}
+
+  - name: Master Public URL
+    yedit:
+      src: "{{ master_config }}"
+      backup: True
+      key: "{{ item }}"
+      value: "https://{{ openshift_master_cluster_public_hostname }}"
+    with_items:
+    - masterPublicURL
+    - oauthConfig.masterPublicURL
+
+  - name: Asset Public URL
+    yedit:
+      src: "{{ master_config }}"
+      backup: False
+      key: "oauthConfig.assetPublicURL"
+      value: "https://{{  openshift_master_cluster_public_hostname }}/console/"
+
+  - name: Named Certificates
+    yedit:
+      backup: False
+      src: "{{ master_config }}"
+      edits:
+      - key:  servingInfo.namedCertificates
+        value: []
+      - key: servingInfo.namedCertificates
+        value:
+          - certFile: "{{ master_cert }}"
+            keyFile: "{{ master_key }}"
+            names:
+              - "{{ openshift_master_cluster_public_hostname }}"
+
+  - name: Extract oauthclients
+    command: "oc -o yaml get --export oauthclients {{ item }}"
+    with_items:
+    - "{{ oauth.keys() | list }}"
+    register: console 
+
+  - name: Edit oauthclient configuration 
+    yedit:
+      content: "{{ item.stdout }}"
+      append: True
+      key: redirectURIs
+      value: "{{ oauth[item.item].url }}"
+    with_items: 
+    - "{{ console['results'] }}"
+    register: updated_oauth 
+
+  - name: Create oauth file
+    copy:
+      content: "{{ item.result[0].edit | to_nice_yaml }}"
+      dest: "/tmp/{{ item.item.item }}.yaml"
+    with_items: 
+    - "{{ updated_oauth['results'] }}"
+
+  - name: Replace oauthclients
+    command: "oc replace -f /tmp/{{ item.item.item }}.yaml"
+    with_items:
+    - "{{ updated_oauth['results'] }}"
+
+  - name: Extract ConfigMap
+    command: "oc extract configmap/{{ oauth[item].configmap }} -n {{ item }} --to=/tmp --confirm"
+    with_items:
+    - "{{ oauth.keys() | list }}"
+    register: configmaps  
+
+
+# TODO: Maybe someday figure out how to use the stdout from configmaps.  It has the
+# filenames of the extracted yaml files
+
+  - name: Modify openshift-console
+    yedit:
+      src: /tmp/console-config.yaml
+      backup: True
+      edits:
+      - key: clusterInfo.consoleBaseAddress
+        value: "{{ oauth['openshift-console'].url }}"
+      - key: clusterInfo.developerConsolePublicURL
+        value: "{{ oauth['openshift-web-console'].url }}"
+      - key:  clusterInfo.masterPublicURL
+        value: "https://{{ openshift_master_cluster_public_hostname }}"
+
+  - name: Modify openshift-web-console
+    yedit:
+      src: /tmp/webconsole-config.yaml
+      backup: True
+      edits:
+      - key: clusterInfo.adminConsolePublicURL
+        value: "{{ oauth['openshift-console'].url }}"
+      - key:  clusterInfo.masterPublicURL
+        value: "https://{{ openshift_master_cluster_public_hostname }}"
+      - key: clusterInfo.consolePublicURL
+        value: "{{ oauth['openshift-web-console'].url }}"
+        
+  - name: Delete Existing ConfigMaps
+    command: "oc delete configmap {{ oauth[item].configmap }} -n {{ item }}"
+    with_items:
+    - "{{ oauth.keys() | list }}"
+
+  - name: Recreate ConfigMaps 
+    command: "oc create configmap {{ oauth[item].configmap }} -n {{ item }} --from-file=/tmp/{{ oauth[item].configmap }}.yaml" 
+    with_items:
+    - "{{ oauth.keys() | list }}"
+
+  - name: Delete openshift-console route
+    command: "oc delete route console -n openshift-console"
+
+  - name: Recreate openshift-console route
+    command: "oc create route reencrypt console --service=console --hostname=console.{{ openshift_master_default_subdomain }} -n openshift-console"
+
+  - name: Delete Pods
+    command: "oc delete pod --all -n {{ item }}"
+    with_items:
+    - "{{ oauth.keys() | list }}"
+
+  - name: Restart Master
+    command: "/usr/local/bin/master-restart {{ item }}"
+    with_items:
+    - "api"
+    - "controllers"
