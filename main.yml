@@ -182,19 +182,31 @@
     with_items:
     - "{{ oauth.keys() | list }}"
 
+  - name: Overwrite webconsole-config
+    shell: "oc -o yaml get configmap webconsole-config -n openshift-web-console > /etc/origin/master/webconsole-config.yaml"
+
   - name: Delete openshift-console route
     command: "oc delete route console -n openshift-console"
 
   - name: Recreate openshift-console route
     command: "oc create route reencrypt console --service=console --hostname=console.{{ openshift_master_default_subdomain }} -n openshift-console"
-
-  - name: Delete Pods
-    command: "oc delete pod --all -n {{ item }}"
-    with_items:
-    - "{{ oauth.keys() | list }}"
-
   - name: Restart Master
     command: "/usr/local/bin/master-restart {{ item }}"
     with_items:
     - "api"
     - "controllers"
+
+  - name: Wait OpenShift 
+    local_action:
+      module: wait_for
+      host: "{{ inventory_hostname }}"
+      state: started
+      port: 443 
+      delay: 30
+      connect_timeout: 15
+      timeout: 600
+
+  - name: Delete Pods
+    command: "oc delete pod --all -n {{ item }}"
+    with_items:
+    - "{{ oauth.keys() | list }}"
