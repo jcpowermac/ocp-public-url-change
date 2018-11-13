@@ -4,8 +4,6 @@
   gather_facts: True
   vars:
     router: "infranode00.example.com"
-    master_config: /etc/origin/master/master-config.yaml
-    webconfig_config: /etc/origin/master/webconsole-config.yaml
   roles:
   - kwoodson.yedit
   tasks:
@@ -69,8 +67,10 @@
             url: "https://{{ openshift_master_cluster_public_hostname }}/console/"
             configmap: webconsole-config
         openshift-console:
-            url: "https://console.{{ openshift_master_default_subdomain }}/"
+            url: "https://console.{{ openshift_master_default_subdomain }}"
             configmap: console-config
+
+
 
 # Use the new openshift_master_default_subdomain
 - import_playbook: /usr/share/ansible/openshift-ansible/playbooks/openshift-hosted/redeploy-router-certificates.yml
