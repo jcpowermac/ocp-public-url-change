@@ -1,49 +1,76 @@
 ---
-- name: Change OpenShift Subdomain 
+- name: Change OpenShift Subdomain
   hosts: masters
   gather_facts: True
   vars:
     router: "infranode00.example.com"
-    master_cluster_public_subdomain: srv.ravcloud.com
-    master_cert: "/etc/origin/master/star.{{ master_cluster_public_subdomain }}.crt"
-    master_key: "/etc/origin/master/star.{{ master_cluster_public_subdomain }}.key"
     master_config: /etc/origin/master/master-config.yaml
     webconfig_config: /etc/origin/master/webconsole-config.yaml
-    oauth: 
-        openshift-web-console: 
-            url: "https://{{ openshift_master_cluster_public_hostname }}/console/"
-            configmap: webconsole-config
-        openshift-console:
-            url: "https://console.{{ routing_config_subdomain }}/"
-            configmap: console-config
   roles:
-  - kwoodson.yedit 
-  tasks:  
+  - kwoodson.yedit
+  tasks:
+  - name: Localhost Facts
+    setup:
+    delegate_to: localhost
+    delegate_facts: True
+
   - name: Wait for connection to be available
     local_action:
       module: wait_for
       host: "{{ item }}"
       state: started
-      port: 22 
+      port: 22
       delay: 5
       connect_timeout: 15
       timeout: 600
     with_items:
     - "{{ groups['nodes'] }}"
 
-# TODO: Get the router a better way
+## TODO: Get the router a better way
   - name: Get IP Address
     uri:
       url: "http://www.opentlc.com/getip"
       return_content: True
     delegate_to: "{{ router }}"
-    register: getip 
+    register: getip
+
+  - name: Get Master Public IP Address
+    uri:
+      url: "http://www.opentlc.com/getip"
+      return_content: True
+    register: get_master_ip
+
 
   - set_fact:
-      openshift_master_default_subdomain: "{{ getip.content | replace('\n', '')}}.xip.io"
+      guid: "{{ hostvars['localhost'].ansible_hostname.split('-')[1] }}"
 
-  - debug:
-      msg: "{{  openshift_master_default_subdomain  }}"
+# What is 'master_cluster_public_subdomain?
+# It is the subdomain that will be used to create a wildcard cert.
+# TODO: Figure out how to determine public DNS.
+
+  - set_fact:
+      master_cluster_public_subdomain: srv.ravcloud.com
+      openshift_master_cluster_public_hostname: "1master00-ocpv311cnvbaseline-foeobk36.srv.ravcloud.com"
+      openshift_master_default_subdomain: "{{ getip.content | replace('\n', '')}}.xip.io"
+    when: guid == 'repl'
+
+  - set_fact:
+      master_cluster_public_subdomain: generic.opentlc.com
+      openshift_master_cluster_public_hostname: "master00-{{ guid }}.generic.opentlc.com"
+      openshift_master_default_subdomain: "apps-{{ guid }}.generic.opentlc.com"
+    when: guid != 'repl'
+
+
+  - set_fact:
+      master_cert: "/etc/origin/master/star.{{ master_cluster_public_subdomain }}.crt"
+      master_key: "/etc/origin/master/star.{{ master_cluster_public_subdomain }}.key"
+      oauth:
+        openshift-web-console:
+            url: "https://{{ openshift_master_cluster_public_hostname }}/console/"
+            configmap: webconsole-config
+        openshift-console:
+            url: "https://console.{{ openshift_master_default_subdomain }}/"
+            configmap: console-config
 
 # Use the new openshift_master_default_subdomain
 - import_playbook: /usr/share/ansible/openshift-ansible/playbooks/openshift-hosted/redeploy-router-certificates.yml
@@ -52,23 +79,13 @@
   hosts: masters
   gather_facts: True
   vars:
-    master_cluster_public_subdomain: srv.ravcloud.com
-    master_cert: "/etc/origin/master/star.{{ master_cluster_public_subdomain }}.crt"
-    master_key: "/etc/origin/master/star.{{ master_cluster_public_subdomain }}.key"
     master_config: /etc/origin/master/master-config.yaml
     webconfig_config: /etc/origin/master/webconsole-config.yaml
-    oauth: 
-        openshift-web-console: 
-            url: "https://{{ openshift_master_cluster_public_hostname }}/console/"
-            configmap: webconsole-config
-        openshift-console:
-            url: "https://console.{{ openshift_master_default_subdomain }}/"
-            configmap: console-config
   roles:
-  - kwoodson.yedit 
-  tasks:  
+  - kwoodson.yedit
+  tasks:
   - debug:
-      msg: "{{ oauth['openshift-console'].url }}"
+      msg: "{{ oauth }}"
   - name: Create wildcard certificate
     command: >
             oc adm ca create-server-cert
@@ -114,23 +131,23 @@
     command: "oc -o yaml get --export oauthclients {{ item }}"
     with_items:
     - "{{ oauth.keys() | list }}"
-    register: console 
+    register: console
 
-  - name: Edit oauthclient configuration 
+  - name: Edit oauthclient configuration
     yedit:
       content: "{{ item.stdout }}"
       append: True
       key: redirectURIs
       value: "{{ oauth[item.item].url }}"
-    with_items: 
+    with_items:
     - "{{ console['results'] }}"
-    register: updated_oauth 
+    register: updated_oauth
 
   - name: Create oauth file
     copy:
       content: "{{ item.result[0].edit | to_nice_yaml }}"
       dest: "/tmp/{{ item.item.item }}.yaml"
-    with_items: 
+    with_items:
     - "{{ updated_oauth['results'] }}"
 
   - name: Replace oauthclients
@@ -142,7 +159,7 @@
     command: "oc extract configmap/{{ oauth[item].configmap }} -n {{ item }} --to=/tmp --confirm"
     with_items:
     - "{{ oauth.keys() | list }}"
-    register: configmaps  
+    register: configmaps
 
 
 # TODO: Maybe someday figure out how to use the stdout from configmaps.  It has the
@@ -165,43 +182,58 @@
       src: /tmp/webconsole-config.yaml
       backup: True
       edits:
+      - key: clusterInfo.metricsPublicURL
+        value: "https://hawkular-metrics.{{ openshift_master_default_subdomain }}/hawkular/metrics"
+      - key: clusterInfo.loggingPublicURL
+        value: "https://kibana.{{ openshift_master_default_subdomain }}"
       - key: clusterInfo.adminConsolePublicURL
         value: "{{ oauth['openshift-console'].url }}"
       - key:  clusterInfo.masterPublicURL
         value: "https://{{ openshift_master_cluster_public_hostname }}"
       - key: clusterInfo.consolePublicURL
         value: "{{ oauth['openshift-web-console'].url }}"
-        
+
   - name: Delete Existing ConfigMaps
     command: "oc delete configmap {{ oauth[item].configmap }} -n {{ item }}"
     with_items:
     - "{{ oauth.keys() | list }}"
 
-  - name: Recreate ConfigMaps 
-    command: "oc create configmap {{ oauth[item].configmap }} -n {{ item }} --from-file=/tmp/{{ oauth[item].configmap }}.yaml" 
+  - name: Recreate ConfigMaps
+    command: "oc create configmap {{ oauth[item].configmap }} -n {{ item }} --from-file=/tmp/{{ oauth[item].configmap }}.yaml"
     with_items:
     - "{{ oauth.keys() | list }}"
 
   - name: Overwrite webconsole-config
     shell: "oc -o yaml get configmap webconsole-config -n openshift-web-console > /etc/origin/master/webconsole-config.yaml"
 
-  - name: Delete openshift-console route
-    command: "oc delete route console -n openshift-console"
+  - name: Delete routes
+    command: "oc delete route {{ item.route }} -n {{ item.namespace }}"
+    ignore_errors: True
+    with_items:
+    - { namespace: 'openshift-console', route: 'console' }
+    - { namespace: 'openshift-infra', route: 'hawkular-metrics' }
+    - { namespace: 'openshift-logging', route: 'logging-kibana' }
 
-  - name: Recreate openshift-console route
-    command: "oc create route reencrypt console --service=console --hostname=console.{{ openshift_master_default_subdomain }} -n openshift-console"
+# TODO: Prometheus
+  - name: Recreate routes
+    command: "oc create route reencrypt {{ item.route }} --service={{ item.route }} --hostname={{ item.hostname }} -n {{ item.namespace }}"
+    with_items:
+    - { namespace: 'openshift-console', route: 'console', hostname: 'console.{{ openshift_master_default_subdomain }}' }
+    - { namespace: 'openshift-infra', route: 'hawkular-metrics' , hostname: 'hawkular-metrics.{{ openshift_master_default_subdomain }}' }
+    - { namespace: 'openshift-logging', route: 'logging-kibana' , hostname: 'kibana.{{ openshift_master_default_subdomain }}' }
+
   - name: Restart Master
     command: "/usr/local/bin/master-restart {{ item }}"
     with_items:
     - "api"
     - "controllers"
 
-  - name: Wait OpenShift 
+  - name: Wait OpenShift
     local_action:
       module: wait_for
       host: "{{ inventory_hostname }}"
       state: started
-      port: 443 
+      port: 443
       delay: 30
       connect_timeout: 15
       timeout: 600
