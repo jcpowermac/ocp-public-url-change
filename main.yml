@@ -41,17 +41,17 @@
 
   - set_fact:
       guid: "{{ hostvars['localhost'].ansible_hostname.split('-')[1] }}"
-
-# What is 'master_cluster_public_subdomain?
-# It is the subdomain that will be used to create a wildcard cert.
-# TODO: Figure out how to determine public DNS.
-
+#
+## What is 'master_cluster_public_subdomain?
+## It is the subdomain that will be used to create a wildcard cert.
+## TODO: Figure out how to determine public DNS.
+#
   - set_fact:
       master_cluster_public_subdomain: srv.ravcloud.com
       openshift_master_cluster_public_hostname: "1master00-ocpv311cnvbaseline-foeobk36.srv.ravcloud.com"
       openshift_master_default_subdomain: "{{ getip.content | replace('\n', '')}}.xip.io"
     when: guid == 'repl'
-
+#
   - set_fact:
       master_cluster_public_subdomain: generic.opentlc.com
       openshift_master_cluster_public_hostname: "master00-{{ guid }}.generic.opentlc.com"
@@ -205,6 +205,51 @@
 
   - name: Overwrite webconsole-config
     shell: "oc -o yaml get configmap webconsole-config -n openshift-web-console > /etc/origin/master/webconsole-config.yaml"
+
+
+  - name: Export Routes
+    command: "oc -o yaml -n {{ item.namespace }} get --export route {{ item.route }}" 
+    register: routes
+    with_items:
+    - { namespace: 'openshift-console', route: 'console' }
+    - { namespace: 'openshift-infra', route: 'hawkular-metrics' }
+    - { namespace: 'openshift-logging', route: 'logging-kibana' }
+    - { namespace: 'openshift-monitoring', route: 'alertmanager-main' }
+    - { namespace: 'openshift-monitoring', route: 'prometheus-k8s' }
+    - { namespace: 'openshift-monitoring', route: 'grafana' }
+
+  - name: Get Hosts
+    yedit:
+      content: "{{ item.stdout }}"
+      state: list
+      key: spec.host
+    register: hosts
+    with_items:
+    - "{{ routes.results }}"
+
+  - name: Modify Routes
+    yedit:
+      content: "{{ item.item.stdout }}"
+      key: spec.host
+      value: "{{ item.result.split('.')[0] }}.{{ openshift_master_default_subdomain }}" 
+    register: new_routes
+    with_items:
+    - "{{ hosts.results }}"
+
+  - name: Create oauth file
+    copy:
+      content: "{{ item.result[0].edit | to_nice_yaml }}"
+      dest: "/tmp/{{ item.item.item.item.route }}.yaml"
+    when: item is changed
+    with_items:
+    - "{{ new_routes.results }}"
+
+  - name: Replace oauthclients
+    command: "oc replace -f /tmp/{{ item.item.item.item.route }}.yaml -n {{ item.item.item.item.namespace }}"
+    when: item is changed
+    with_items:
+    - "{{ new_routes.results }}"
+
 
   - name: Delete routes
     command: "oc delete route {{ item.route }} -n {{ item.namespace }}"
