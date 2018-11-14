@@ -1,17 +1,12 @@
 ---
 - name: Change OpenShift Subdomain
   hosts: masters
-  gather_facts: True
+  gather_facts: False
   vars:
     router: "infranode00.example.com"
   roles:
   - kwoodson.yedit
   tasks:
-  - name: Localhost Facts
-    setup:
-    delegate_to: localhost
-    delegate_facts: True
-
   - name: Wait for connection to be available
     local_action:
       module: wait_for
@@ -20,9 +15,14 @@
       port: 22
       delay: 5
       connect_timeout: 15
-      timeout: 600
+      timeout: 1200
     with_items:
     - "{{ groups['nodes'] }}"
+
+  - name: Localhost Facts
+    setup:
+    delegate_to: localhost
+    delegate_facts: True
 
 # TODO: Get the router a better way
   - name: Get IP Address
