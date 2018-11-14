@@ -24,7 +24,7 @@
     with_items:
     - "{{ groups['nodes'] }}"
 
-## TODO: Get the router a better way
+# TODO: Get the router a better way
   - name: Get IP Address
     uri:
       url: "http://www.opentlc.com/getip"
@@ -38,14 +38,13 @@
       return_content: True
     register: get_master_ip
 
-
   - set_fact:
       guid: "{{ hostvars['localhost'].ansible_hostname.split('-')[1] }}"
-#
-## What is 'master_cluster_public_subdomain?
-## It is the subdomain that will be used to create a wildcard cert.
-## TODO: Figure out how to determine public DNS.
-#
+
+# master_cluster_public_subdomain
+# Is a subdomain that represents the master public url.  This subdomain
+# will be used to create a wildcard certificate.
+
   - set_fact:
       master_cluster_public_subdomain: srv.ravcloud.com
       openshift_master_cluster_public_hostname: "1master00-ocpv311cnvbaseline-foeobk36.srv.ravcloud.com"
@@ -70,9 +69,7 @@
             url: "https://console.{{ openshift_master_default_subdomain }}"
             configmap: console-config
 
-
-
-# Use the new openshift_master_default_subdomain
+# Replace the router certificates and use the new openshift_master_default_subdomain
 - import_playbook: /usr/share/ansible/openshift-ansible/playbooks/openshift-hosted/redeploy-router-certificates.yml
 
 - name: Change Public Url
@@ -84,8 +81,6 @@
   roles:
   - kwoodson.yedit
   tasks:
-  - debug:
-      msg: "{{ oauth }}"
   - name: Create wildcard certificate
     command: >
             oc adm ca create-server-cert
@@ -112,6 +107,10 @@
       backup: False
       key: "oauthConfig.assetPublicURL"
       value: "https://{{  openshift_master_cluster_public_hostname }}/console/"
+
+# Use named certificates for the master public url
+# This leaves alone the original master certificate and will use 
+# the wildcard cert for the public hostname.
 
   - name: Named Certificates
     yedit:
@@ -155,15 +154,11 @@
     with_items:
     - "{{ updated_oauth['results'] }}"
 
-  - name: Extract ConfigMap
+  - name: Extract Console ConfigMaps
     command: "oc extract configmap/{{ oauth[item].configmap }} -n {{ item }} --to=/tmp --confirm"
     with_items:
     - "{{ oauth.keys() | list }}"
     register: configmaps
-
-
-# TODO: Maybe someday figure out how to use the stdout from configmaps.  It has the
-# filenames of the extracted yaml files
 
   - name: Modify openshift-console
     yedit:
@@ -203,9 +198,9 @@
     with_items:
     - "{{ oauth.keys() | list }}"
 
+# TODO: This could be replaced with register, copy content item.stdout
   - name: Overwrite webconsole-config
     shell: "oc -o yaml get configmap webconsole-config -n openshift-web-console > /etc/origin/master/webconsole-config.yaml"
-
 
   - name: Export Routes
     command: "oc -o yaml -n {{ item.namespace }} get --export route {{ item.route }}" 
@@ -236,7 +231,7 @@
     with_items:
     - "{{ hosts.results }}"
 
-  - name: Create oauth file
+  - name: Create Route manifests
     copy:
       content: "{{ item.result[0].edit | to_nice_yaml }}"
       dest: "/tmp/{{ item.item.item.item.route }}.yaml"
@@ -244,28 +239,11 @@
     with_items:
     - "{{ new_routes.results }}"
 
-  - name: Replace oauthclients
+  - name: Replace Routes 
     command: "oc replace -f /tmp/{{ item.item.item.item.route }}.yaml -n {{ item.item.item.item.namespace }}"
     when: item is changed
     with_items:
     - "{{ new_routes.results }}"
-
-
-  - name: Delete routes
-    command: "oc delete route {{ item.route }} -n {{ item.namespace }}"
-    ignore_errors: True
-    with_items:
-    - { namespace: 'openshift-console', route: 'console' }
-    - { namespace: 'openshift-infra', route: 'hawkular-metrics' }
-    - { namespace: 'openshift-logging', route: 'logging-kibana' }
-
-# TODO: Prometheus
-  - name: Recreate routes
-    command: "oc create route reencrypt {{ item.route }} --service={{ item.route }} --hostname={{ item.hostname }} -n {{ item.namespace }}"
-    with_items:
-    - { namespace: 'openshift-console', route: 'console', hostname: 'console.{{ openshift_master_default_subdomain }}' }
-    - { namespace: 'openshift-infra', route: 'hawkular-metrics' , hostname: 'hawkular-metrics.{{ openshift_master_default_subdomain }}' }
-    - { namespace: 'openshift-logging', route: 'logging-kibana' , hostname: 'kibana.{{ openshift_master_default_subdomain }}' }
 
   - name: Restart Master
     command: "/usr/local/bin/master-restart {{ item }}"
@@ -283,7 +261,14 @@
       connect_timeout: 15
       timeout: 600
 
-  - name: Delete Pods
+  - name: Delete Console Pods
     command: "oc delete pod --all -n {{ item }}"
     with_items:
     - "{{ oauth.keys() | list }}"
+
+  - name: Regenerate Prometheus Configuration 
+    command: "{{ item }}" 
+    with_items:
+    - "oc delete secret --field-selector type=Opaque -n openshift-monitoring"
+    - "oc delete secret --field-selector type=kubernetes.io/tls -n openshift-monitoring"
+    - "oc delete pod --all -n openshift-monitoring"
