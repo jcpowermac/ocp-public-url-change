@@ -4,6 +4,7 @@
   gather_facts: False
   vars:
     router: "infranode00.example.com"
+    master_config: /etc/origin/master/master-config.yaml
   roles:
   - kwoodson.yedit
   tasks:
@@ -47,7 +48,7 @@
 
   - set_fact:
       master_cluster_public_subdomain: srv.ravcloud.com
-      openshift_master_cluster_public_hostname: "1master00-ocpv311cnvbaseline-foeobk36.srv.ravcloud.com"
+      openshift_master_cluster_public_hostname: "1master00-ocpv311cnvbaseline-pfz7slst.srv.ravcloud.com"
       openshift_master_default_subdomain: "{{ getip.content | replace('\n', '')}}.xip.io"
     when: guid == 'repl'
 #
@@ -68,6 +69,13 @@
         openshift-console:
             url: "https://console.{{ openshift_master_default_subdomain }}"
             configmap: console-config
+
+  - name: Update Routing Config Subdomain
+    yedit:
+      src: "{{ master_config }}"
+      backup: True
+      key: "routingConfig.subdomain"
+      value: "{{ openshift_master_default_subdomain }}"
 
 # Replace the router certificates and use the new openshift_master_default_subdomain
 - import_playbook: /usr/share/ansible/openshift-ansible/playbooks/openshift-hosted/redeploy-router-certificates.yml
@@ -91,7 +99,7 @@
                 --cert={{ master_cert }}
                 --key={{ master_key }}
 
-  - name: Master Public URL
+  - name: Update Master Public URL
     yedit:
       src: "{{ master_config }}"
       backup: True
@@ -101,15 +109,16 @@
     - masterPublicURL
     - oauthConfig.masterPublicURL
 
-  - name: Asset Public URL
+  - name: Update Asset Public URL
     yedit:
       src: "{{ master_config }}"
       backup: False
       key: "oauthConfig.assetPublicURL"
       value: "https://{{  openshift_master_cluster_public_hostname }}/console/"
 
+
 # Use named certificates for the master public url
-# This leaves alone the original master certificate and will use 
+# This leaves alone the original master certificate and will use
 # the wildcard cert for the public hostname.
 
   - name: Named Certificates
@@ -203,7 +212,7 @@
     shell: "oc -o yaml get configmap webconsole-config -n openshift-web-console > /etc/origin/master/webconsole-config.yaml"
 
   - name: Export Routes
-    command: "oc -o yaml -n {{ item.namespace }} get --export route {{ item.route }}" 
+    command: "oc -o yaml -n {{ item.namespace }} get --export route {{ item.route }}"
     register: routes
     with_items:
     - { namespace: 'openshift-console', route: 'console' }
@@ -226,7 +235,7 @@
     yedit:
       content: "{{ item.item.stdout }}"
       key: spec.host
-      value: "{{ item.result.split('.')[0] }}.{{ openshift_master_default_subdomain }}" 
+      value: "{{ item.result.split('.')[0] }}.{{ openshift_master_default_subdomain }}"
     register: new_routes
     with_items:
     - "{{ hosts.results }}"
@@ -239,7 +248,7 @@
     with_items:
     - "{{ new_routes.results }}"
 
-  - name: Replace Routes 
+  - name: Replace Routes
     command: "oc replace -f /tmp/{{ item.item.item.item.route }}.yaml -n {{ item.item.item.item.namespace }}"
     when: item is changed
     with_items:
@@ -266,8 +275,8 @@
     with_items:
     - "{{ oauth.keys() | list }}"
 
-  - name: Regenerate Prometheus Configuration 
-    command: "{{ item }}" 
+  - name: Regenerate Prometheus Configuration
+    command: "{{ item }}"
     with_items:
     - "oc delete secret --field-selector type=Opaque -n openshift-monitoring"
     - "oc delete secret --field-selector type=kubernetes.io/tls -n openshift-monitoring"
