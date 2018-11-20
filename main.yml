@@ -3,8 +3,8 @@
   hosts: masters
   gather_facts: False
   vars:
-    router: "infranode00.example.com"
     master_config: /etc/origin/master/master-config.yaml
+    router_command: !unsafe 'oc get pod -l router=router -n default --template "{{range .items}}{{.spec.nodeName}}{{end}}"'
   roles:
   - kwoodson.yedit
   tasks:
@@ -40,12 +40,16 @@
     local_action:
       module: command "update-ca-trust"
 
+  - name: Get Router
+    command: "{{ router_command }}"
+    register: router
+
 # TODO: Get the router a better way
   - name: Get IP Address
     uri:
       url: "http://www.opentlc.com/getip"
       return_content: True
-    delegate_to: "{{ router }}"
+    delegate_to: "{{ router.stdout }}"
     register: getip
 
   - name: Get Master Public IP Address
