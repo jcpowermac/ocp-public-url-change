@@ -25,6 +25,21 @@
     delegate_to: localhost
     delegate_facts: True
 
+# This is for the API lab so that we can curl
+# without setting a path the ca or master cert
+#
+  - name: Fetch Master CA
+    fetch:
+      src: "{{ item }}"
+      dest: /etc/pki/ca-trust/source/anchors/ 
+      flat: True
+    with_items:
+      - /etc/origin/master/ca.crt
+
+  - name: Update Trust
+    local_action:
+      module: command "update-ca-trust"
+
 # TODO: Get the router a better way
   - name: Get IP Address
     uri:
