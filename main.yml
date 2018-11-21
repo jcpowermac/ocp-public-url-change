@@ -4,6 +4,7 @@
   gather_facts: False
   vars:
     master_config: /etc/origin/master/master-config.yaml
+    webconfig_config: /etc/origin/master/webconsole-config.yaml
     router_command: !unsafe 'oc get pod -l router=router -n default --template "{{range .items}}{{.spec.nodeName}}{{end}}"'
   roles:
   - kwoodson.yedit
@@ -100,18 +101,6 @@
     import_role:
       name: motd
 
-# Replace the router certificates and use the new openshift_master_default_subdomain
-- import_playbook: /usr/share/ansible/openshift-ansible/playbooks/openshift-hosted/redeploy-router-certificates.yml
-
-- name: Change Public Url
-  hosts: masters
-  gather_facts: True
-  vars:
-    master_config: /etc/origin/master/master-config.yaml
-    webconfig_config: /etc/origin/master/webconsole-config.yaml
-  roles:
-  - kwoodson.yedit
-  tasks:
   - name: Create wildcard certificate
     command: >
             oc adm ca create-server-cert
@@ -304,3 +293,6 @@
     - "oc delete secret --field-selector type=Opaque -n openshift-monitoring"
     - "oc delete secret --field-selector type=kubernetes.io/tls -n openshift-monitoring"
     - "oc delete pod --all -n openshift-monitoring"
+
+# Replace the router certificates and use the new openshift_master_default_subdomain
+- import_playbook: /usr/share/ansible/openshift-ansible/playbooks/openshift-hosted/redeploy-router-certificates.yml
