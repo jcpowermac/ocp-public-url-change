@@ -38,6 +38,11 @@
     delegate_to: localhost
     delegate_facts: True
 
+  - name: Install APB CLI Tool
+    yum:
+      name: apb
+      state: latest 
+
 # This is for the API lab so that we can curl
 # without setting a path the ca or master cert
 #
