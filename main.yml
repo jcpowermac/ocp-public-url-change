@@ -20,6 +20,18 @@
     with_items:
     - "{{ groups['nodes'] }}"
 
+# Make sure OpenShift is available via 443 
+# before moving on
+  - name: Wait for OpenShift to be available
+    local_action:
+      module: wait_for
+      host: "{{ inventory_hostname }}"
+      state: started
+      port: 443
+      delay: 30
+      connect_timeout: 15
+      timeout: 600
+
   - name: Localhost Facts
     setup:
     delegate_to: localhost
@@ -283,7 +295,7 @@
     - "api"
     - "controllers"
 
-  - name: Wait OpenShift
+  - name: Wait for OpenShift to be available
     local_action:
       module: wait_for
       host: "{{ inventory_hostname }}"
