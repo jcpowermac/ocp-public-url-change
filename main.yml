@@ -38,11 +38,6 @@
     delegate_to: localhost
     delegate_facts: True
 
-  - name: Install APB CLI Tool
-    yum:
-      name: apb
-      state: latest 
-
 # This is for the API lab so that we can curl
 # without setting a path the ca or master cert
 #
@@ -104,7 +99,10 @@
             url: "https://{{ openshift_master_cluster_public_hostname }}/console/"
             configmap: webconsole-config
         openshift-console:
-            url: "https://console.{{ openshift_master_default_subdomain }}"
+            url: "https://console.{{ openshift_master_default_subdomain }}/"
+            configmap: console-config
+        kubevirt-web-ui:
+            url: "https://kubevirt-web-ui.{{ openshift_master_default_subdomain }}/"
             configmap: console-config
 
   - name: Update Routing Config Subdomain
@@ -192,39 +190,41 @@
     with_items:
     - "{{ updated_oauth['results'] }}"
 
+
+  - name: Create Directories for ConfigMaps
+    file:
+      path: "/tmp/{{ item }}"
+      state: directory
+    with_items:
+    - "{{ oauth.keys() | list }}"
+      
+
   - name: Extract Console ConfigMaps
-    command: "oc extract configmap/{{ oauth[item].configmap }} -n {{ item }} --to=/tmp --confirm"
+    command: "oc extract configmap/{{ oauth[item].configmap }} -n {{ item }} --to=/tmp/{{ item }} --confirm"
     with_items:
     - "{{ oauth.keys() | list }}"
     register: configmaps
 
-  - name: Modify openshift-console
+  - name: Modify Console Config
     yedit:
-      src: /tmp/console-config.yaml
-      backup: True
+      src: "/tmp/{{ item }}/{{ oauth[item].configmap }}.yaml"
       edits:
       - key: clusterInfo.consoleBaseAddress
-        value: "{{ oauth['openshift-console'].url }}"
+        value: "{{ oauth[item].url }}"
       - key: clusterInfo.developerConsolePublicURL
-        value: "{{ oauth['openshift-web-console'].url }}"
-      - key:  clusterInfo.masterPublicURL
-        value: "https://{{ openshift_master_cluster_public_hostname }}"
-
-  - name: Modify openshift-web-console
-    yedit:
-      src: /tmp/webconsole-config.yaml
-      backup: True
-      edits:
+        value: "{{ oauth[item].url }}"
       - key: clusterInfo.metricsPublicURL
         value: "https://hawkular-metrics.{{ openshift_master_default_subdomain }}/hawkular/metrics"
       - key: clusterInfo.loggingPublicURL
         value: "https://kibana.{{ openshift_master_default_subdomain }}"
       - key: clusterInfo.adminConsolePublicURL
-        value: "{{ oauth['openshift-console'].url }}"
+        value: "{{ oauth[item].url }}"
       - key:  clusterInfo.masterPublicURL
         value: "https://{{ openshift_master_cluster_public_hostname }}"
       - key: clusterInfo.consolePublicURL
-        value: "{{ oauth['openshift-web-console'].url }}"
+        value: "{{ oauth[item].url }}"
+    with_items:
+    - "{{ oauth.keys() | list }}"
 
   - name: Delete Existing ConfigMaps
     command: "oc delete configmap {{ oauth[item].configmap }} -n {{ item }}"
@@ -232,7 +232,7 @@
     - "{{ oauth.keys() | list }}"
 
   - name: Recreate ConfigMaps
-    command: "oc create configmap {{ oauth[item].configmap }} -n {{ item }} --from-file=/tmp/{{ oauth[item].configmap }}.yaml"
+    command: "oc create configmap {{ oauth[item].configmap }} -n {{ item }} --from-file=/tmp/{{ item }}/{{ oauth[item].configmap }}.yaml"
     with_items:
     - "{{ oauth.keys() | list }}"
 
@@ -245,6 +245,7 @@
     register: routes
     with_items:
     - { namespace: 'openshift-console', route: 'console' }
+    - { namespace: 'kubevirt-web-ui', route: 'console' }
     - { namespace: 'openshift-infra', route: 'hawkular-metrics' }
     - { namespace: 'openshift-logging', route: 'logging-kibana' }
     - { namespace: 'openshift-monitoring', route: 'alertmanager-main' }
@@ -269,16 +270,23 @@
     with_items:
     - "{{ hosts.results }}"
 
+  - name: Create namespace directories
+    file:
+      path: "/tmp/{{ item.item.item.item.namespace }}" 
+      state: directory
+    with_items:
+    - "{{ new_routes.results }}"
+
   - name: Create Route manifests
     copy:
       content: "{{ item.result[0].edit | to_nice_yaml }}"
-      dest: "/tmp/{{ item.item.item.item.route }}.yaml"
+      dest: "/tmp/{{ item.item.item.item.namespace }}/{{ item.item.item.item.route }}.yaml"
     when: item is changed
     with_items:
     - "{{ new_routes.results }}"
 
   - name: Replace Routes
-    command: "oc replace -f /tmp/{{ item.item.item.item.route }}.yaml -n {{ item.item.item.item.namespace }}"
+    command: "oc replace -f /tmp/{{ item.item.item.item.namespace }}/{{ item.item.item.item.route }}.yaml -n {{ item.item.item.item.namespace }}"
     when: item is changed
     with_items:
     - "{{ new_routes.results }}"
