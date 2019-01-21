@@ -184,7 +184,7 @@
               - "{{ openshift_master_cluster_public_hostname }}"
 
   - name: Extract oauthclients
-    command: "oc -o yaml get --export oauthclients openshift-console"
+    command: "oc -o yaml get --export oauthclients {{ item }}"
     with_items:
     - "{{ oauth.keys() | list }}"
     register: console
