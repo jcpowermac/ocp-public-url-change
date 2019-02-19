@@ -1,0 +1,12 @@
+#####################################################################################
+      Welcome to Red Hat Openshift Container Platform 3.11 Workshop On RHPDS
+{% if guid == 'repl' %}
+                        *** DEVELOPMENT MODE ***
+{% endif %}
+#####################################################################################
+Information about Your current environment:
+
+OpenShift Application Console: https://{{ openshift_master_cluster_public_hostname }}:8443
+OpenShift Administrator Console: https://console.{{ openshift_master_default_subdomain }}:8443
+
+Wildcard domain for application routes: *.{{ openshift_master_default_subdomain }}
