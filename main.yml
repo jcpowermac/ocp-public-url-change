@@ -5,7 +5,7 @@
   vars:
     # Enable/Disable reconfigure for Kubevirt routes and oauth
     kubevirt: "true"
-    master_hostname: "clientvm"
+    master_hostname: "master00"
     master_config: /etc/origin/master/master-config.yaml
     webconfig_config: /etc/origin/master/webconsole-config.yaml
     router_command: !unsafe 'oc get pod -l router=router -n default --template "{{range .items}}{{.spec.nodeName}}{{end}}"'
@@ -97,17 +97,15 @@
 
   - set_fact:
       master_cluster_public_subdomain: srv.ravcloud.com
-      #openshift_master_cluster_public_hostname: "1master00-ocpv311cnvbaseline-pfz7slst.srv.ravcloud.com"
       openshift_master_cluster_public_hostname: "{{ ravcloud.fqdns[0] }}"
       openshift_master_default_subdomain: "{{ getip.content | replace('\n', '')}}.xip.io"
     when: guid == 'repl'
-#
+
   - set_fact:
       master_cluster_public_subdomain: generic.opentlc.com
-      openshift_master_cluster_public_hostname: "master00-{{ guid }}.generic.opentlc.com"
+      openshift_master_cluster_public_hostname: "{{ master_hostname }}-{{ guid }}.generic.opentlc.com"
       openshift_master_default_subdomain: "apps-{{ guid }}.generic.opentlc.com"
     when: guid != 'repl'
-
 
   - set_fact:
       master_cert: "/etc/origin/master/star.{{ master_cluster_public_subdomain }}.crt"
