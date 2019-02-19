@@ -3,8 +3,9 @@
   hosts: masters
   gather_facts: False
   vars:
-# Enable/Disable reconfigure for Kubevirt routes and oauth
+    # Enable/Disable reconfigure for Kubevirt routes and oauth
     kubevirt: "true"
+    master_hostname: "clientvm"
     master_config: /etc/origin/master/master-config.yaml
     webconfig_config: /etc/origin/master/webconsole-config.yaml
     router_command: !unsafe 'oc get pod -l router=router -n default --template "{{range .items}}{{.spec.nodeName}}{{end}}"'
