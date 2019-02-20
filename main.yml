@@ -8,6 +8,7 @@
     hawkular: "true"
     kibana: "true"
     master_hostname: "master00"
+    master_port: "443"
     motd_template: "motd.j2"
     master_config: /etc/origin/master/master-config.yaml
     webconfig_config: /etc/origin/master/webconsole-config.yaml
@@ -28,14 +29,14 @@
     with_items:
     - "{{ groups['nodes'] }}"
 
-# Make sure OpenShift is available via 443 
+# Make sure OpenShift is available via master port 
 # before moving on
   - name: Wait for OpenShift to be available
     local_action:
       module: wait_for
       host: "{{ inventory_hostname }}"
       state: started
-      port: 443
+      port: "{{ master_port }}"
       delay: 30
       connect_timeout: 15
       timeout: 600
@@ -339,7 +340,7 @@
       module: wait_for
       host: "{{ inventory_hostname }}"
       state: started
-      port: 443
+      port: "{{ master_port }}"
       delay: 30
       connect_timeout: 15
       timeout: 600
