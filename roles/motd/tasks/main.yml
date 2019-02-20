@@ -2,5 +2,5 @@
 - name: Set motd
   local_action:
     module: template
-    src: {{ motd_template }}
+    src: "{{ motd_template }}"
     dest: /etc/motd
