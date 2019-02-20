@@ -8,7 +8,7 @@
     hawkular: "true"
     kibana: "true"
     master_hostname: "master00"
-    master_port: "443"
+    master_api_port: "443"
     motd_template: "motd.j2"
     master_config: /etc/origin/master/master-config.yaml
     webconfig_config: /etc/origin/master/webconsole-config.yaml
@@ -36,7 +36,7 @@
       module: wait_for
       host: "{{ inventory_hostname }}"
       state: started
-      port: "{{ master_port }}"
+      port: "{{ master_api_port }}"
       delay: 30
       connect_timeout: 15
       timeout: 600
@@ -340,7 +340,7 @@
       module: wait_for
       host: "{{ inventory_hostname }}"
       state: started
-      port: "{{ master_port }}"
+      port: "{{ master_api_port }}"
       delay: 30
       connect_timeout: 15
       timeout: 600
