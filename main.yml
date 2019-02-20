@@ -5,6 +5,8 @@
   vars:
     # Enable/Disable reconfigure for Kubevirt routes and oauth
     kubevirt: "true"
+    hawkular: "true"
+    kibana: "true"
     master_hostname: "master00"
     motd_template: "motd.j2"
     master_config: /etc/origin/master/master-config.yaml
@@ -236,8 +238,10 @@
         value: "{{ oauth[item].url }}"
       - key: clusterInfo.metricsPublicURL
         value: "https://hawkular-metrics.{{ openshift_master_default_subdomain }}/hawkular/metrics"
+        when: hawkular == 'true'
       - key: clusterInfo.loggingPublicURL
         value: "https://kibana.{{ openshift_master_default_subdomain }}"
+        when: kibana == 'true'
       - key: clusterInfo.adminConsolePublicURL
         value: "{{ oauth[item].url }}"
       - key:  clusterInfo.masterPublicURL
@@ -266,11 +270,19 @@
     register: routes
     with_items:
     - { namespace: 'openshift-console', route: 'console' }
-    - { namespace: 'openshift-infra', route: 'hawkular-metrics' }
-    - { namespace: 'openshift-logging', route: 'logging-kibana' }
     - { namespace: 'openshift-monitoring', route: 'alertmanager-main' }
     - { namespace: 'openshift-monitoring', route: 'prometheus-k8s' }
     - { namespace: 'openshift-monitoring', route: 'grafana' }
+    
+  - name: Export Routes For Hawkular
+    set_fact:
+      routes: "{{ routes }} + [{ namespace: 'openshift-infra', route: 'hawkular-metrics' }]"
+    when: hawkular == 'true'
+
+  - name: Export Routes For Kibana
+    set_fact:
+      routes: "{{ routes }} + [{ namespace: 'openshift-logging', route: 'logging-kibana' }]"
+    when: kibana == 'true'
 
   - name: Export Routes For KubeVirt
     set_fact:
