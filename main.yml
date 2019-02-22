@@ -8,6 +8,15 @@
     master_config: /etc/origin/master/master-config.yaml
     webconfig_config: /etc/origin/master/webconsole-config.yaml
     router_command: !unsafe 'oc get pod -l router=router -n default --template "{{range .items}}{{.spec.nodeName}}{{end}}"'
+    kubevirt_route:
+      - { namespace: 'kubevirt-web-ui', route: 'console' }
+    openshift_routes:
+      - { namespace: 'openshift-console', route: 'console' }
+      - { namespace: 'openshift-infra', route: 'hawkular-metrics' }
+      - { namespace: 'openshift-logging', route: 'logging-kibana' }
+      - { namespace: 'openshift-monitoring', route: 'alertmanager-main' }
+      - { namespace: 'openshift-monitoring', route: 'prometheus-k8s' }
+      - { namespace: 'openshift-monitoring', route: 'grafana' }
   roles:
   - kwoodson.yedit
   tasks:
@@ -261,21 +270,15 @@
   - name: Overwrite webconsole-config
     shell: "oc -o yaml get configmap webconsole-config -n openshift-web-console > /etc/origin/master/webconsole-config.yaml"
 
+  - name: Add KubeVirt route to the list of OpenShift routes 
+    set_fact:
+      openshift_routes: "{{ openshift_routes }} + [ kubevirt_route ]"
+    when: kubevirt == 'true'
+    
   - name: Export Routes
     command: "oc -o yaml -n {{ item.namespace }} get --export route {{ item.route }}"
     register: routes
-    with_items:
-    - { namespace: 'openshift-console', route: 'console' }
-    - { namespace: 'openshift-infra', route: 'hawkular-metrics' }
-    - { namespace: 'openshift-logging', route: 'logging-kibana' }
-    - { namespace: 'openshift-monitoring', route: 'alertmanager-main' }
-    - { namespace: 'openshift-monitoring', route: 'prometheus-k8s' }
-    - { namespace: 'openshift-monitoring', route: 'grafana' }
-
-  - name: Export Routes For KubeVirt
-    set_fact:
-      routes: "{{ routes }} + [{ namespace: 'kubevirt-web-ui', route: 'console' }]"
-    when: kubevirt == 'true'
+    with_items: "{{ openshift_routes }}"
 
   - name: Get Hosts
     yedit:
