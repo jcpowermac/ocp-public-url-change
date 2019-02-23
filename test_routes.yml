@@ -1,0 +1,59 @@
+---
+
+# Test playbook for determining of routes
+# Execute as follows:
+#   $ ansible-playbook -i localhost, app_routes.yml
+
+
+
+- name: Change App Specific OpenShift Subdomains
+  hosts: all
+  gather_facts: False
+  vars:
+    routelist:
+    master_cluster_public_subdomain: generic.opentlc.com
+    known_default_ocp_311_projects:
+      - default
+      - kube-public
+      - kube-service-catalog
+      - kube-system
+      - management-infra
+      - openshift
+      - openshift-ansible-service-broker
+      - openshift-console
+      - openshift-infra
+      - openshift-logging
+      - openshift-monitoring
+      - openshift-node
+      - openshift-sdn
+      - openshift-template-service-broker
+      - openshift-web-console
+
+  tasks:
+
+    - name: set fact
+      set_fact:
+        ocp_and_app_routes:
+          - { namespace: 'openshift-console', route: 'console' }
+          - { namespace: 'openshift-monitoring', route: 'alertmanager-main' }
+          - { namespace: 'openshift-monitoring', route: 'prometheus-k8s' }
+          - { namespace: 'openshift-monitoring', route: 'grafana' }
+
+    - name: test
+      command: oc get projects -o json
+      register: ocp_projects
+
+    - set_fact:
+#        projects: ocp_projects.stdout |_from_json |json_query(''items[*].metadata.annotations."openshift.io/sa.scc.uid-range"'')
+        projects: "{{ ocp_projects.stdout |_from_json |json_query(''items[*].metadata.annotations."openshift.io/sa.scc.uid-range"''}}"
+    - debug:
+        msg: "{{ projects }}"
+
+    - name: Get all existing projects
+      command: "oc get project --output=jsonpath={.items[*].metadata.name}"
+      register: ocp_projects
+
+#    - name: Iterate through list of existing OCP projects and potentially modify routes
+#      include: identify_app_routes.yml
+#      with_items: "{{ ocp_projects.stdout.split(' ') }}"
+

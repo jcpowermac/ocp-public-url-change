@@ -13,6 +13,22 @@
     master_config: /etc/origin/master/master-config.yaml
     webconfig_config: /etc/origin/master/webconsole-config.yaml
     router_command: !unsafe 'oc get pod -l router=router -n default --template "{{range .items}}{{.spec.nodeName}}{{end}}"'
+    known_default_ocp_311_projects:
+      - default
+      - kube-public
+      - kube-service-catalog
+      - kube-system
+      - management-infra
+      - openshift
+      - openshift-ansible-service-broker
+      - openshift-console
+      - openshift-infra
+      - openshift-logging
+      - openshift-monitoring
+      - openshift-node
+      - openshift-sdn
+      - openshift-template-service-broker
+      - openshift-web-console
   roles:
   - kwoodson.yedit
   tasks:
@@ -266,15 +282,47 @@
   - name: Overwrite webconsole-config
     shell: "oc -o yaml get configmap webconsole-config -n openshift-web-console > /etc/origin/master/webconsole-config.yaml"
 
+  - name: set fact
+    set_fact:
+      ocp_and_app_routes:
+        - { namespace: 'openshift-console', route: 'console' }
+        - { namespace: 'openshift-monitoring', route: 'alertmanager-main' }
+        - { namespace: 'openshift-monitoring', route: 'prometheus-k8s' }
+        - { namespace: 'openshift-monitoring', route: 'grafana' }
+
+
+ # ######	Identify routes from business application related projects 	######### #
+
+  - name: Export current projects
+    command: "oc get project --output=jsonpath={.items[*].metadata.name}"
+    register: current_ocp_projects
+
+  - name: identify application routes from application related projects
+    include: identify_app_routes.yml
+    with_items: "{{ current_ocp_projects.stdout.split(' ') }}"
+ 
+  - debug:
+      msg: "ocp_and_app_routes = {{ ocp_and_app_routes }}"
+      verbosity: 1
+
+############################################################################################
+
+
   - name: Export Routes
     command: "oc -o yaml -n {{ item.namespace }} get --export route {{ item.route }}"
     register: routes
     with_items:
-    - { namespace: 'openshift-console', route: 'console' }
-    - { namespace: 'openshift-monitoring', route: 'alertmanager-main' }
-    - { namespace: 'openshift-monitoring', route: 'prometheus-k8s' }
-    - { namespace: 'openshift-monitoring', route: 'grafana' }
-    
+      - "{{ ocp_and_app_routes }}"
+   
+
+###########################################################################
+##  JA Bride: 22 Feb 2019   .... This section appears to have several bugs:
+
+#  1)  The syntax for adding to a list is incorrect
+#  2)  This entire section should precede the previous task that executes:  oc -o yaml -n {{ item.namespace }} get --export route {{ item.route }}
+
+#  Not a problem for now because non of these routes actually exist anyway in current configuration of OCP
+ 
   - name: Export Routes For Hawkular
     set_fact:
       routes: "{{ routes }} + [{ namespace: 'openshift-infra', route: 'hawkular-metrics' }]"
@@ -289,6 +337,8 @@
     set_fact:
       routes: "{{ routes }} + [{ namespace: 'kubevirt-web-ui', route: 'console' }]"
     when: kubevirt == 'true'
+
+#############################################################################
 
   - name: Get Hosts
     yedit:

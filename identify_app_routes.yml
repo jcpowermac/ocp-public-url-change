@@ -1,0 +1,24 @@
+---
+
+- block:
+  - debug:
+      msg: Will modify routes in project "{{ item }}"
+
+  - command: >
+            oc get route -n {{ item }} --output=jsonpath={.items[*].metadata.name}
+    register: route_names
+  - debug:
+      msg: "{{ item }}  route names = {{ route_names.stdout.split(' ') }}"
+
+  - set_fact:
+      ocp_and_app_routes: "{{ ocp_and_app_routes + [{'namespace': item, 'route': route_name }] }}"
+    with_items:
+      -  "{{ route_names.stdout.split(' ') }}"
+    loop_control:
+      loop_var: route_name
+
+  - debug:
+      msg: "{{ item }}  ocp_and_app_routes = {{ ocp_and_app_routes }}"
+
+  when: item not in known_default_ocp_311_projects
+
