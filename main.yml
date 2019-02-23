@@ -13,6 +13,7 @@
     master_config: /etc/origin/master/master-config.yaml
     webconfig_config: /etc/origin/master/webconsole-config.yaml
     router_command: !unsafe 'oc get pod -l router=router -n default --template "{{range .items}}{{.spec.nodeName}}{{end}}"'
+    update_app_routes: "true"
     known_default_ocp_311_projects:
       - default
       - kube-public
@@ -32,6 +33,20 @@
   roles:
   - kwoodson.yedit
   tasks:
+
+  - name: set fact
+    set_fact:
+      ocp_and_app_routes:
+#        - { namespace: 'openshift-console', route: 'console' }
+#        - { namespace: 'openshift-monitoring', route: 'alertmanager-main' }
+#        - { namespace: 'openshift-monitoring', route: 'prometheus-k8s' }
+#        - { namespace: 'openshift-monitoring', route: 'grafana' }
+        - { namespace: 'istio-system', route: 'grafana' }
+        - { namespace: 'istio-system', route: 'istio-ingressgateway' }
+        - { namespace: 'istio-system', route: 'prometheus' }
+        - { namespace: 'istio-system', route: 'servicegraph' }
+        - { namespace: 'istio-system', route: 'tracing' }
+
 
   - name: Wait for connection to be available
     local_action:
@@ -282,24 +297,18 @@
   - name: Overwrite webconsole-config
     shell: "oc -o yaml get configmap webconsole-config -n openshift-web-console > /etc/origin/master/webconsole-config.yaml"
 
-  - name: set fact
-    set_fact:
-      ocp_and_app_routes:
-        - { namespace: 'openshift-console', route: 'console' }
-        - { namespace: 'openshift-monitoring', route: 'alertmanager-main' }
-        - { namespace: 'openshift-monitoring', route: 'prometheus-k8s' }
-        - { namespace: 'openshift-monitoring', route: 'grafana' }
-
 
  # ######	Identify routes from business application related projects 	######### #
 
   - name: Export current projects
     command: "oc get project --output=jsonpath={.items[*].metadata.name}"
     register: current_ocp_projects
+    when: update_app_routes == 'true'
 
   - name: identify application routes from application related projects
     include: identify_app_routes.yml
     with_items: "{{ current_ocp_projects.stdout.split(' ') }}"
+    when: update_app_routes == 'true'
  
   - debug:
       msg: "ocp_and_app_routes = {{ ocp_and_app_routes }}"

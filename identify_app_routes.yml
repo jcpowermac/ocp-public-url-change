@@ -16,6 +16,7 @@
       -  "{{ route_names.stdout.split(' ') }}"
     loop_control:
       loop_var: route_name
+    when: route_names.stdout is defined and  route_names.stdout != ""
 
   - debug:
       msg: "{{ item }}  ocp_and_app_routes = {{ ocp_and_app_routes }}"

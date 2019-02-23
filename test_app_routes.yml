@@ -2,7 +2,7 @@
 
 # Test playbook for determining of routes
 # Execute as follows:
-#   $ ansible-playbook -i localhost, app_routes.yml
+#   $ ansible-playbook -i localhost, test_app_routes.yml
 
 
 
@@ -43,17 +43,20 @@
       command: oc get projects -o json
       register: ocp_projects
 
-    - set_fact:
+#    - set_fact:
 #        projects: ocp_projects.stdout |_from_json |json_query(''items[*].metadata.annotations."openshift.io/sa.scc.uid-range"'')
-        projects: "{{ ocp_projects.stdout |_from_json |json_query(''items[*].metadata.annotations."openshift.io/sa.scc.uid-range"''}}"
-    - debug:
-        msg: "{{ projects }}"
+#        projects: "{{ ocp_projects.stdout |_from_json |json_query(''items[*].metadata.annotations."openshift.io/sa.scc.uid-range"''}}"
+#    - debug:
+#        msg: "{{ projects }}"
 
     - name: Get all existing projects
       command: "oc get project --output=jsonpath={.items[*].metadata.name}"
       register: ocp_projects
 
-#    - name: Iterate through list of existing OCP projects and potentially modify routes
-#      include: identify_app_routes.yml
-#      with_items: "{{ ocp_projects.stdout.split(' ') }}"
+    - name: Iterate through list of existing OCP projects and identify routes
+      include: identify_app_routes.yml
+      with_items: "{{ ocp_projects.stdout.split(' ') }}"
+
+    - debug:
+        msg: "ocp_and_app_routes = {{ ocp_and_app_routes }}"
 
