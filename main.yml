@@ -37,15 +37,10 @@
   - name: set fact
     set_fact:
       ocp_and_app_routes:
-#        - { namespace: 'openshift-console', route: 'console' }
-#        - { namespace: 'openshift-monitoring', route: 'alertmanager-main' }
-#        - { namespace: 'openshift-monitoring', route: 'prometheus-k8s' }
-#        - { namespace: 'openshift-monitoring', route: 'grafana' }
-        - { namespace: 'istio-system', route: 'grafana' }
-        - { namespace: 'istio-system', route: 'istio-ingressgateway' }
-        - { namespace: 'istio-system', route: 'prometheus' }
-        - { namespace: 'istio-system', route: 'servicegraph' }
-        - { namespace: 'istio-system', route: 'tracing' }
+        - { namespace: 'openshift-console', route: 'console' }
+        - { namespace: 'openshift-monitoring', route: 'alertmanager-main' }
+        - { namespace: 'openshift-monitoring', route: 'prometheus-k8s' }
+        - { namespace: 'openshift-monitoring', route: 'grafana' }
 
 
   - name: Wait for connection to be available
