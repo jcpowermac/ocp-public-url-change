@@ -4,7 +4,7 @@
   gather_facts: False
   vars:
 # Enable/Disable reconfigure for Kubevirt routes and oauth
-    kubevirt: "true"
+    kubevirt: True 
     master_config: /etc/origin/master/master-config.yaml
     webconfig_config: /etc/origin/master/webconsole-config.yaml
     router_command: !unsafe 'oc get pod -l router=router -n default --template "{{range .items}}{{.spec.nodeName}}{{end}}"'
@@ -105,21 +105,23 @@
 
   - set_fact:
       master_cluster_public_subdomain: srv.ravcloud.com
-      #openshift_master_cluster_public_hostname: "1master00-ocpv311cnvbaseline-pfz7slst.srv.ravcloud.com"
       openshift_master_cluster_public_hostname: "{{ ravcloud.fqdns[0] }}"
       openshift_master_default_subdomain: "{{ getip.content | replace('\n', '')}}.xip.io"
     when: guid == 'repl'
-#
+
   - set_fact:
       master_cluster_public_subdomain: generic.opentlc.com
       openshift_master_cluster_public_hostname: "master00-{{ guid }}.generic.opentlc.com"
       openshift_master_default_subdomain: "apps-{{ guid }}.generic.opentlc.com"
     when: guid != 'repl'
 
-
   - set_fact:
       master_cert: "/etc/origin/master/star.{{ master_cluster_public_subdomain }}.crt"
       master_key: "/etc/origin/master/star.{{ master_cluster_public_subdomain }}.key"
+      kubevirt_oauth:
+        kubevirt-web-ui:
+            url: "https://kubevirt-web-ui.{{ openshift_master_default_subdomain }}/"
+            configmap: console-config
       oauth:
         openshift-web-console:
             url: "https://{{ openshift_master_cluster_public_hostname }}/console/"
@@ -129,11 +131,8 @@
             configmap: console-config
 
   - set_fact:
-      oauth:
-        kubevirt-web-ui:
-            url: "https://kubevirt-web-ui.{{ openshift_master_default_subdomain }}/"
-            configmap: console-config
-    when: kubevirt == 'true'
+      oauth: "{{ oauth | combine(kubevirt_oauth, recursive=True) }}"
+    when: kubevirt
 
   - name: Update Routing Config Subdomain
     yedit:
@@ -273,7 +272,7 @@
   - name: Add KubeVirt route to the list of OpenShift routes 
     set_fact:
       openshift_routes: "{{ openshift_routes }} + [ kubevirt_route ]"
-    when: kubevirt == 'true'
+    when: kubevirt
     
   - name: Export Routes
     command: "oc -o yaml -n {{ item.namespace }} get --export route {{ item.route }}"
