@@ -87,6 +87,13 @@
     local_action:
       module: command "update-ca-trust"
 
+  - name: Approve CSRs
+    shell: "oc get csr -oname | xargs oc adm certificate approve"
+
+  - name: Wait for cluster to recompose
+    pause:
+      minutes: 2
+
   - name: Get Router
     command: "{{ router_command }}"
     register: router
