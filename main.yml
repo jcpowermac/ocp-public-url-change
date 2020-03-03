@@ -89,10 +89,13 @@
 
   - name: Approve CSRs
     shell: "oc get csr -oname | xargs oc adm certificate approve"
+    ignore_errors: yes
+    register: cmd_out
 
   - name: Wait for cluster to recompose
     pause:
       minutes: 2
+    when: cmd_out.rc == 0
 
   - name: Get Router
     command: "{{ router_command }}"
