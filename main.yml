@@ -71,7 +71,6 @@
     setup:
     delegate_to: localhost
     delegate_facts: True
-  - debug: var=hostvars['localhost']
 
 # This is for the API lab so that we can curl
 # without setting a path the ca or master cert
