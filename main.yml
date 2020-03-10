@@ -118,6 +118,11 @@
   - set_fact:
       guid: "{{ hostvars['localhost'].ansible_hostname.split('-')[1] }}"
 
+  - name: Get domain of the server
+    command: dnsdomainname
+    register: dnsdomainname
+    delegate_to: localhost
+ 
 # master_cluster_public_subdomain
 # Is a subdomain that represents the master public url.  This subdomain
 # will be used to create a wildcard certificate.
@@ -145,7 +150,13 @@
       master_cluster_public_subdomain: generic.opentlc.com
       openshift_master_cluster_public_hostname: "{{ master_hostname }}-{{ guid }}.generic.opentlc.com"
       openshift_master_default_subdomain: "apps-{{ guid }}.generic.opentlc.com"
-    when: guid != 'repl'
+    when: guid != 'repl' and 'osp.opentlc.com' not in dnsdomainname.stdout
+
+  - set_fact:
+      master_cluster_public_subdomain: "{{ dnsdomainname.stdout }}"
+      openshift_master_cluster_public_hostname: "{{ master_hostname }}-{{ guid }}.{{ dnsdomainname.stdout }}"
+      openshift_master_default_subdomain: "apps-{{ guid }}.{{ dnsdomainname.stdout }}"
+    when: "'osp.opentlc.com' in dnsdomainname.stdout"
 
   - set_fact:
       master_cert: "/etc/origin/master/star.{{ master_cluster_public_subdomain }}.crt"
