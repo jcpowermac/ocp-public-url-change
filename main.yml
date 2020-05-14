@@ -1,4 +1,29 @@
 ---
+- name: Waiting for the master
+  hosts: localhost
+  tasks:
+  - name: Wait for connection to be available
+    local_action:
+      module: wait_for
+      host: "{{ item }}"
+      state: started
+      port: 22
+      delay: 5
+      connect_timeout: 15
+      timeout: 1200
+    with_items:
+    - "{{ groups['masters'] }}"
+
+
+
+- name: Delete certificate from nodes
+  hosts: nodes
+  tasks:
+    - name: Delete /etc/origin/node/certificates/kubelet-client-current.pem
+      file:
+        path: "/etc/origin/node/certificates/kubelet-client-current.pem"
+        state: absent
+
 - name: Change OpenShift Subdomain
   hosts: masters
   gather_facts: False
@@ -12,7 +37,7 @@
     motd_template: "motd.j2"
     master_config: /etc/origin/master/master-config.yaml
     webconfig_config: /etc/origin/master/webconsole-config.yaml
-    router_command: !unsafe 'oc get pod -l router=router -n default --template "{{range .items}}{{.spec.nodeName}}{{end}}"'
+    router_command: !unsafe 'oc get pod -l router=router -n default --template "{{range .items}}{{if .spec.nodeName}}{{.spec.nodeName}}{{end}}{{end}}"'
     update_app_routes: "true"
     known_default_ocp_311_projects:
       - default
