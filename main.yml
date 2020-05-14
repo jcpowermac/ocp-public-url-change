@@ -1,4 +1,29 @@
 ---
+- name: Waiting for the master
+  hosts: localhost
+  tasks:
+  - name: Wait for connection to be available
+    local_action:
+      module: wait_for
+      host: "{{ item }}"
+      state: started
+      port: 22
+      delay: 5
+      connect_timeout: 15
+      timeout: 1200
+    with_items:
+    - "{{ groups['masters'] }}"
+
+
+
+- name: Delete certificate from nodes
+  hosts: nodes
+  tasks:
+    - name: Delete /etc/origin/node/certificates/kubelet-client-current.pem
+      file:
+        path: "/etc/origin/node/certificates/kubelet-client-current.pem"
+        state: absent
+
 - name: Change OpenShift Subdomain
   hosts: masters
   gather_facts: False
