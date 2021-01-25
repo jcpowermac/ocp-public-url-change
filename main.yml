@@ -172,9 +172,9 @@
     when: guid == 'repl'
 
   - set_fact:
-      master_cluster_public_subdomain: generic.opentlc.com
-      openshift_master_cluster_public_hostname: "{{ master_hostname }}-{{ guid }}.generic.opentlc.com"
-      openshift_master_default_subdomain: "apps-{{ guid }}.generic.opentlc.com"
+      master_cluster_public_subdomain: dynamic.opentlc.com
+      openshift_master_cluster_public_hostname: "{{ master_hostname }}-{{ guid }}.dynamic.opentlc.com"
+      openshift_master_default_subdomain: "apps-{{ guid }}.dynamic.opentlc.com"
     when: guid != 'repl' and 'osp.opentlc.com' not in dnsdomainname.stdout
 
   - set_fact:
