@@ -175,13 +175,13 @@
       master_cluster_public_subdomain: dynamic.opentlc.com
       openshift_master_cluster_public_hostname: "{{ master_hostname }}-{{ guid }}.dynamic.opentlc.com"
       openshift_master_default_subdomain: "apps-{{ guid }}.dynamic.opentlc.com"
-    when: guid != 'repl' and 'osp.opentlc.com' not in dnsdomainname.stdout
+    when: guid != 'repl' and 'dynamic.opentlc.com' not in dnsdomainname.stdout
 
   - set_fact:
       master_cluster_public_subdomain: "{{ dnsdomainname.stdout }}"
       openshift_master_cluster_public_hostname: "{{ master_hostname }}-{{ guid }}.{{ dnsdomainname.stdout }}"
       openshift_master_default_subdomain: "apps-{{ guid }}.{{ dnsdomainname.stdout }}"
-    when: "'osp.opentlc.com' in dnsdomainname.stdout"
+    when: "'dynamic.opentlc.com' in dnsdomainname.stdout"
 
   - set_fact:
       master_cert: "/etc/origin/master/star.{{ master_cluster_public_subdomain }}.crt"
